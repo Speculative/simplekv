@@ -25,6 +25,7 @@ struct GetArgs {
     int requests;
     size_t cache_level;
     size_t database_layers;
+    int request_rate_limit;
 };
 
 struct RangeArgs {

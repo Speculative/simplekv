@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <time.h>
 #include <argp.h>
+#include <limits.h>
 
 #include "simplekv.h"
 #include "helpers.h"
@@ -116,13 +117,14 @@ int terminate(void) {
     return 0;
 }
 
-void initialize_workers(WorkerArg *args, size_t total_op_count, char *db_path, int use_xrp) {
+void initialize_workers(WorkerArg *args, size_t total_op_count, char *db_path, int use_xrp, int request_rate_limit) {
     for (size_t i = 0; i < worker_num; i++) {
         args[i].index = i;
         args[i].op_count = (total_op_count / worker_num) + (i < total_op_count % worker_num);
         args[i].db_handler = get_handler(db_path, O_RDONLY);
         args[i].timer = 0;
         args[i].use_xrp = use_xrp;
+        args[i].request_interval = request_rate_limit > 0 ? (1000000000 * worker_num) / (request_rate_limit) : 0;
     }
 }
 
@@ -140,7 +142,7 @@ void terminate_workers(pthread_t *tids, WorkerArg *args) {
 }
 
 int run(char *db_path, size_t layer_num, size_t request_num, size_t thread_num, int use_xrp,
-            size_t cache_level) {
+            size_t cache_level, int request_rate_limit) {
 
     printf("Running benchmark with %ld layers, %ld requests, and %ld thread(s)\n",
                 layer_num, request_num, thread_num);
@@ -153,7 +155,7 @@ int run(char *db_path, size_t layer_num, size_t request_num, size_t thread_num, 
     pthread_t tids[worker_num];
     WorkerArg args[worker_num];
 
-    initialize_workers(args, request_num, db_path, use_xrp);
+    initialize_workers(args, request_num, db_path, use_xrp, request_rate_limit);
 
     clock_gettime(CLOCK_REALTIME, &start);
     srandom(start.tv_nsec ^ start.tv_sec);
@@ -173,7 +175,7 @@ int run(char *db_path, size_t layer_num, size_t request_num, size_t thread_num, 
 
 void *subtask(void *args) {
     WorkerArg *r = (WorkerArg*)args;
-    struct timespec tps, tpe;
+    struct timespec tps, tpe, tpi;
     srand(r->index);
     printf("thread %ld op_count %ld\n", r->index, r->op_count);
     for (size_t i = 0; i < r->op_count; i++) {
@@ -192,7 +194,16 @@ void *subtask(void *args) {
         }
 
         clock_gettime(CLOCK_REALTIME, &tpe);
-        r->timer += 1000000000 * (tpe.tv_sec - tps.tv_sec) + (tpe.tv_nsec - tps.tv_nsec);
+        long elapsed = 1000000000 * (tpe.tv_sec - tps.tv_sec) + (tpe.tv_nsec - tps.tv_nsec);
+        r->timer += elapsed;
+
+        // Busy wait if rate limited
+        if (r->request_interval > 0) {
+            while (elapsed < r->request_interval) {
+                clock_gettime(CLOCK_REALTIME, &tpi);
+                elapsed = 1000000000 * (tpi.tv_sec - tps.tv_sec) + (tpi.tv_nsec - tps.tv_nsec);
+            }
+        }
 
         /* Parse and check value from db */
         char buf[sizeof(val__t) + 1];

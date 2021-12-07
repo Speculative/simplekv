@@ -33,6 +33,7 @@ static struct argp_option get_opts[] = {
         { "use-xrp", 'x', 0, 0, "Use the (previously) loaded XRP BPF function to query the DB." },
         { "requests", 'r', "REQ", 0, "Number of requests to submit per thread. Ignored if -k is set." },
         { "threads" , 't', "N_THREADS", 0, "Number of concurrent threads to run. Ignored if -k is set." },
+        { "rate-limit", 'l', "RATE_LIMIT", 0, "Maximum requests per second per thread to maintain."},
         { 0 }
 };
 static char get_doc[] = "Run the benchmark to retrieve single keys from the database";
@@ -81,6 +82,15 @@ static int _parse_get_opts(int key, char *arg, struct argp_state *state) {
             st->key_set = 1;
             if (endptr != NULL && *endptr != '\0') {
                 argp_failure(state, 1, 0, "invalid key");
+            }
+        }
+            break;
+
+        case 'l': {
+            char *endptr = NULL;
+            st->request_rate_limit = strtol(arg, &endptr, 10);
+            if (endptr != NULL && *endptr != '\0') {
+                argp_failure(state, 1, 0, "invalid rate limit");
             }
         }
             break;

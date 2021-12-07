@@ -22,7 +22,7 @@ int do_get_cmd(int argc, char *argv[], struct ArgState *as) {
         return lookup_single_key(as->filename, ga.key, ga.xrp);
     }
 
-    return run(as->filename, as->layers, ga.requests, ga.threads, ga.xrp, ga.cache_level);
+    return run(as->filename, as->layers, ga.requests, ga.threads, ga.xrp, ga.cache_level, ga.request_rate_limit);
 }
 
 int lookup_single_key(char *filename, long key, int use_xrp) {
